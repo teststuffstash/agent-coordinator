@@ -40,6 +40,17 @@ RUN mkdir -p /home/node/.claude /work \
         > /home/node/.claude.json \
     && chown -R node:node /home/node/.claude /home/node/.claude.json /work
 
+# A long coordinator session outlives a 1h GitHub App token. ESO refreshes it in the coordinator-git
+# Secret (~hourly); the launcher mounts that Secret as a FILE (kubelet keeps it current), so shadow
+# `gh` with a wrapper that reads the LIVE token from $GH_TOKEN_FILE per call — never a stale env
+# snapshot. Falls back to the inherited GH_TOKEN env when the file is absent (older launcher).
+RUN printf '%s\n' \
+      '#!/bin/sh' \
+      ': "${GH_TOKEN_FILE:=/var/run/coordinator-git/GH_TOKEN}"' \
+      'if [ -r "$GH_TOKEN_FILE" ]; then GH_TOKEN="$(cat "$GH_TOKEN_FILE")"; export GH_TOKEN; fi' \
+      'exec /usr/bin/gh "$@"' \
+      > /usr/local/bin/gh && chmod +x /usr/local/bin/gh
+
 USER node
 ENV HOME=/home/node
 WORKDIR /work
