@@ -30,10 +30,14 @@ RUN set -eux; \
     npm install -g @anthropic-ai/claude-code; \
     rm -rf /var/lib/apt/lists/*
 
-# Pre-seed onboarding so a fresh container doesn't stop on the first-run wizard (auth itself comes
-# from CLAUDE_CODE_OAUTH_TOKEN at runtime). Owned by the non-root node user (uid 1000).
+# Pre-seed onboarding + folder trust so a fresh container doesn't stop on the first-run wizard or the
+# "Is this a project you trust?" prompt. The coordinator always clones homelab to /work/homelab, so
+# pre-trust that path (projects.<path>.hasTrustDialogAccepted — the documented bypass;
+# --dangerously-skip-permissions does NOT cover the trust prompt). Auth comes from
+# CLAUDE_CODE_OAUTH_TOKEN at runtime. Owned by the non-root node user (uid 1000).
 RUN mkdir -p /home/node/.claude /work \
-    && printf '{"hasCompletedOnboarding":true}\n' > /home/node/.claude.json \
+    && printf '%s\n' '{"hasCompletedOnboarding":true,"projects":{"/work/homelab":{"hasTrustDialogAccepted":true}}}' \
+        > /home/node/.claude.json \
     && chown -R node:node /home/node/.claude /home/node/.claude.json /work
 
 USER node
