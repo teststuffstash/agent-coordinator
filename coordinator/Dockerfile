@@ -30,14 +30,20 @@ RUN set -eux; \
     npm install -g @anthropic-ai/claude-code; \
     rm -rf /var/lib/apt/lists/*
 
-# Pre-seed onboarding + folder trust so a fresh container doesn't stop on the first-run wizard or the
-# "Is this a project you trust?" prompt. The coordinator always clones homelab to /work/homelab, so
-# pre-trust that path (projects.<path>.hasTrustDialogAccepted — the documented bypass;
-# --dangerously-skip-permissions does NOT cover the trust prompt). Auth comes from
-# CLAUDE_CODE_OAUTH_TOKEN at runtime. Owned by the non-root node user (uid 1000).
+# Pre-seed the three things that otherwise stop a fresh container on an interactive prompt, so it
+# comes up silent like the homelab jail:
+#   • onboarding wizard  → ~/.claude.json hasCompletedOnboarding
+#   • "Is this a project you trust?"  → projects./work/homelab.hasTrustDialogAccepted (the coordinator
+#     always clones homelab there). NB --dangerously-skip-permissions does NOT cover this one.
+#   • the Bypass-Permissions WARNING (the flag alone does NOT suppress it) → settings.json
+#     skipDangerousModePermissionPrompt:true + a permissive permissions.allow — copied from the jail's
+#     ~/.claude/settings.json, which is how it never prompts.
+# Auth comes from CLAUDE_CODE_OAUTH_TOKEN at runtime. Owned by the non-root node user (uid 1000).
 RUN mkdir -p /home/node/.claude /work \
     && printf '%s\n' '{"hasCompletedOnboarding":true,"projects":{"/work/homelab":{"hasTrustDialogAccepted":true}}}' \
         > /home/node/.claude.json \
+    && printf '%s\n' '{"permissions":{"allow":["Bash(*)","Read(*)","Edit(*)","Write(*)","WebSearch(*)","WebFetch(*)"]},"skipDangerousModePermissionPrompt":true}' \
+        > /home/node/.claude/settings.json \
     && chown -R node:node /home/node/.claude /home/node/.claude.json /work
 
 # A long coordinator session outlives a 1h GitHub App token. ESO refreshes it in the coordinator-git
