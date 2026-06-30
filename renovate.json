@@ -1,0 +1,26 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    "schedule:earlyMondays"
+  ],
+  "labels": ["dependencies"],
+  "rebaseWhen": "auto",
+  "separateMinorPatch": true,
+  "packageRules": [
+    {
+      "description": "Dockerfile base (node) + kubectl pin — manual review; the Dockerfile hash retags the image",
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["patch", "minor", "major"],
+      "automerge": false,
+      "reviewers": ["sootrasmus"]
+    },
+    {
+      "description": "GitHub Actions — automerge patch/minor",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true
+    }
+  ]
+}
