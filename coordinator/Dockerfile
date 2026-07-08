@@ -26,6 +26,13 @@ RUN set -eux; \
     # kubectl
     curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"; \
     chmod +x /usr/local/bin/kubectl; \
+    # s5cmd — the transcript-capture S3 client (homelab docs/agents/observability-and-retro.md §A1):
+    # the reviewer pod, the coordinator exit-trap and the transcripts-sync CronJob all upload with it.
+    # Pinned release + checksum (static Go binary; not packaged in Debian).
+    curl -fsSLo /tmp/s5cmd.tgz "https://github.com/peak/s5cmd/releases/download/v2.3.0/s5cmd_2.3.0_Linux-64bit.tar.gz"; \
+    echo "de0fdbfa3aceae55e069ba81a0fc17b2026567637603734a387b2fca06c299b4  /tmp/s5cmd.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/s5cmd.tgz -C /usr/local/bin s5cmd; \
+    chmod +x /usr/local/bin/s5cmd; rm /tmp/s5cmd.tgz; \
     # Claude Code CLI
     npm install -g @anthropic-ai/claude-code; \
     rm -rf /var/lib/apt/lists/*
