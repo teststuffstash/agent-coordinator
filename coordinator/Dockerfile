@@ -64,6 +64,14 @@ RUN printf '%s\n' \
       'exec /usr/bin/gh "$@"' \
       > /usr/local/bin/gh && chmod +x /usr/local/bin/gh
 
+# Workflow templates run scripts as `bash -lc '…'` (the container's direct command → SHLVL=1).
+# At login-shell EXIT, Debian's skel ~/.bash_logout runs clear_console, which fails without a
+# console tty; with `set -e` active that failure OVERRIDES an explicit `exit 0` → rc 1. Every
+# idempotent skip path (`echo …; exit 0`) reported Failed while doing exactly its job; the
+# normal path `exec`s away and never runs logout processing, which is why only skips broke
+# (homelab TICK-LOG 2026-07-25; fix verified in-image: same shape, no logout file → rc 0).
+RUN rm -f /home/node/.bash_logout /root/.bash_logout /etc/bash.bash_logout
+
 USER node
 ENV HOME=/home/node
 WORKDIR /work
