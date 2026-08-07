@@ -89,11 +89,21 @@ jobs:
           git config user.name "homelab-deploy[bot]"; git config user.email "homelab-deploy[bot]@users.noreply.github.com"
           git checkout -q -B deploy/agent-coordinator
           sed -i -E "s#^(${VAR}=).*#\1${NEWREF}#" agents/images.env
-          # sweep every manifest pinning this image (ArgoCD-synced Argo yamls roll on merge)
-          pinned=$(git grep -lE "image: ${IMG}:" -- agents/ || true)
-          if [ -n "$pinned" ]; then
-            echo "$pinned" | xargs sed -i -E "s#image: ${IMG}:[^[:space:]]*#image: ${NEWREF}#g"
+          # ONE PIN, ONE FILE (homelab FU-152, 2026-08-07). This used to `git grep` the tag and
+          # rewrite every manifest carrying it — 8 files under agents/coordinator/ and growing as
+          # manifests were added. Seven are CODEOWNERS-owned, so the bump could never auto-merge
+          # (homelab#113), and the eighth is reflexes-argo.yaml where homelab's pin-only-lint
+          # permits ARC-RUNNER pins only, making the same PR structurally red.
+          # agents/coordinator now renders through kustomize: the manifests carry the image with
+          # NO tag and kustomization.yaml supplies it, so this single line is the whole sweep.
+          # ⚠ FAIL LOUDLY if the line is missing. Silently writing nothing here would ship a PR
+          # that bumps images.env alone, leaving every in-cluster pod on the OLD image while the
+          # PR looks correct — the failure this lane is least able to notice.
+          if ! grep -qE '^\s+newTag: ' agents/coordinator/kustomization.yaml 2>/dev/null; then
+            echo "::error::agents/coordinator/kustomization.yaml has no newTag: line — the kustomize pin moved or the file is gone; refusing to open a half-bumped PR"
+            exit 1
           fi
+          sed -i -E "s#^(\s+newTag: ).*#\1${TAG}#" agents/coordinator/kustomization.yaml
           git commit -q -am "deploy: agent-coordinator ${TAG}"
           git push -q -f origin deploy/agent-coordinator
           PR=$(gh pr list --repo "${OWNER}/homelab" --head deploy/agent-coordinator --state open --json number --jq '.[0].number // empty')
