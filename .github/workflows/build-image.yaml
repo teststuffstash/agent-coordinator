@@ -99,5 +99,14 @@ jobs:
           PR=$(gh pr list --repo "${OWNER}/homelab" --head deploy/agent-coordinator --state open --json number --jq '.[0].number // empty')
           [ -n "$PR" ] || PR=$(gh pr create --repo "${OWNER}/homelab" --base master --head deploy/agent-coordinator \
             --title "deploy: agent-coordinator ${TAG}" --body "First-party agent-coordinator image bump (CI-opened). Coordinator/reviewer pods pick it up on next spawn; the Argo CronWorkflow pins are ArgoCD-synced and roll on merge." | grep -oE '[0-9]+$')
+          # The MECHANICAL lane (homelab docs/dependency-upgrades.md 2): `automerge` makes homelab's
+          # review reflex SKIP this PR (review-reflex.sh:262) — a one-line CalVer bump is not worth an
+          # LLM reviewer session — and with `dependencies` the renovate-approve reflex posts the
+          # mechanical approval homelab's require_approval ruleset needs, so it stops waiting on a
+          # human. OUTSIDE the create-if-absent above on purpose: deploy/agent-coordinator is a
+          # long-lived branch, so `gh pr create` rarely runs and a reused PR would never be labelled
+          # (the trap agent-runtime PR#37 had to fix on the identical lane).
+          gh pr edit "$PR" --repo "${OWNER}/homelab" --add-label automerge --add-label dependencies \
+            || echo "::warning::could not label homelab#$PR — the review reflex will not skip it"
           gh pr merge "$PR" --repo "${OWNER}/homelab" --auto --squash || echo "::warning::could not arm auto-merge on homelab#$PR"
           echo "→ homelab bump PR #$PR → ${TAG}"
