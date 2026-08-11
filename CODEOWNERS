@@ -1,0 +1,6 @@
+# Whole-repo human gate (2026-08-11, the reviewer-enable retrace). This repo builds the
+# coordinator image (the loop's judgment seat). No fixer lane exists here, so agents never
+# author PRs — this gate covers the mechanical lanes (deploy pins, Renovate) once the platform
+# stack's bot reviewer is ON, so a bot approval is input, never the merge gate.
+# Enforced only together with require_code_owner_review=true (homelab tofu/github/variables.tf).
+* @RasmusSoot
