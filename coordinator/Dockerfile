@@ -26,6 +26,13 @@ RUN set -eux; \
     # kubectl
     curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"; \
     chmod +x /usr/local/bin/kubectl; \
+    # s5cmd — the transcript-capture S3 client (homelab docs/agents/observability-and-retro.md §A1):
+    # the reviewer pod, the coordinator exit-trap and the transcripts-sync CronJob all upload with it.
+    # Pinned release + checksum (static Go binary; not packaged in Debian).
+    curl -fsSLo /tmp/s5cmd.tgz "https://github.com/peak/s5cmd/releases/download/v2.3.0/s5cmd_2.3.0_Linux-64bit.tar.gz"; \
+    echo "de0fdbfa3aceae55e069ba81a0fc17b2026567637603734a387b2fca06c299b4  /tmp/s5cmd.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/s5cmd.tgz -C /usr/local/bin s5cmd; \
+    chmod +x /usr/local/bin/s5cmd; rm /tmp/s5cmd.tgz; \
     # Claude Code CLI
     npm install -g @anthropic-ai/claude-code; \
     rm -rf /var/lib/apt/lists/*
@@ -56,6 +63,14 @@ RUN printf '%s\n' \
       'if [ -r "$GH_TOKEN_FILE" ]; then GH_TOKEN="$(cat "$GH_TOKEN_FILE")"; export GH_TOKEN; fi' \
       'exec /usr/bin/gh "$@"' \
       > /usr/local/bin/gh && chmod +x /usr/local/bin/gh
+
+# Workflow templates run scripts as `bash -lc '…'` (the container's direct command → SHLVL=1).
+# At login-shell EXIT, Debian's skel ~/.bash_logout runs clear_console, which fails without a
+# console tty; with `set -e` active that failure OVERRIDES an explicit `exit 0` → rc 1. Every
+# idempotent skip path (`echo …; exit 0`) reported Failed while doing exactly its job; the
+# normal path `exec`s away and never runs logout processing, which is why only skips broke
+# (homelab TICK-LOG 2026-07-25; fix verified in-image: same shape, no logout file → rc 0).
+RUN rm -f /home/node/.bash_logout /root/.bash_logout /etc/bash.bash_logout
 
 USER node
 ENV HOME=/home/node
