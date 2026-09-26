@@ -4,3 +4,13 @@
 # stack's bot reviewer is ON, so a bot approval is input, never the merge gate.
 # Enforced only together with require_code_owner_review=true (homelab tofu/github/variables.tf).
 * @RasmusSoot
+
+# Renovate's action-pin lane (the SHA-pinning PRs). Ownership is REPLACED, not dropped: the
+# platform's pin-only-lint (required `ci`) allows only verified action pin bumps via a PR.
+# A real edit — add a step, change a trigger — takes the operator path straight to master,
+# where this check does not run.
+/.github/workflows/
+
+# The ownership file owns itself — otherwise the first thing an agent could propose is its own
+# ungating.
+/CODEOWNERS         @RasmusSoot
