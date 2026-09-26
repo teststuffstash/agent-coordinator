@@ -33,3 +33,28 @@ jobs:
           file: coordinator/Dockerfile
           platforms: linux/amd64
           push: false
+
+      # pin-only-lint (ADR-100 addendum): the `.github/workflows` pin gate. Runs from homelab's
+      # master script (sparse checkout) — a fix there reaches every caller at once. The lint
+      # allows only verified action pin bumps (SHA # tag) in workflow files; any other edit
+      # takes the operator path to master where this check does not run.
+      - name: Fetch homelab's pin-only-lint at master
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: teststuffstash/homelab
+          ref: master
+          path: .homelab-lint
+          sparse-checkout: |
+            scripts/pin-only-lint.sh
+            devbox.json
+            devbox.lock
+          sparse-checkout-cone-mode: false
+
+      - name: Guarded files may only receive pin bumps (pin-only-lint)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
+          PIN_ONLY_REPO: ${{ github.workspace }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          devbox run --config "$GITHUB_WORKSPACE/.homelab-lint" -- bash "$GITHUB_WORKSPACE/.homelab-lint/scripts/pin-only-lint.sh" "$BASE_SHA"

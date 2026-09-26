@@ -1,9 +1,0 @@
-name: pin-only
-on:
-  pull_request:
-    branches: [master]
-permissions:
-  contents: read
-jobs:
-  pin-only:
-    uses: teststuffstash/homelab/.github/workflows/pin-only.reusable.yml@master
