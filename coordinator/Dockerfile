@@ -8,7 +8,7 @@
 #
 # Built + pushed by CI on every push to master (.github/workflows/build-image.yaml); `scripts/
 # build-image.sh` is the local mirror. homelab is the *consumer* — it references the image by tag.
-FROM node:22-bookworm-slim
+FROM node:24-bookworm-slim
 
 ARG KUBECTL_VERSION=v1.36.1
 
