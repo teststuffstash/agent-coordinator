@@ -70,6 +70,21 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/agent-coordinator:${{ steps.ver.outputs.tag }}
             ghcr.io/${{ github.repository_owner }}/agent-coordinator:latest
+      # RUNTIME SMOKE on the PUSHED artifact (mirror of ci.yaml's step; homelab S9 #1988): the tag
+      # is already in ghcr, but nothing pins it until deploy-pin runs — and deploy-pin `needs` this
+      # job, so a tool that cannot start turns the master run red (GithubWorkflowRunFailed) and the
+      # cluster never sees the tag. Pulls the exact bytes that would ship, never a local rebuild.
+      - name: Runtime smoke — the pushed image must start every bundled tool
+        env:
+          REF: ghcr.io/${{ github.repository_owner }}/agent-coordinator:${{ steps.ver.outputs.tag }}
+        run: |
+          set -eux
+          docker pull "$REF"
+          docker run --rm "$REF" claude --version
+          docker run --rm "$REF" gh --version
+          docker run --rm "$REF" kubectl version --client
+          docker run --rm "$REF" s5cmd version
+          docker run --rm "$REF" python3 --version
 
   # deploy-pin: bump homelab agents/images.env + every manifest that pins this image (the Argo
   # CronWorkflow yamls are ArgoCD-synced, so the merged bump PR rolls them near-instantly).

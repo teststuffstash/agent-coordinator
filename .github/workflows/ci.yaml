@@ -33,6 +33,23 @@ jobs:
           file: coordinator/Dockerfile
           platforms: linux/amd64
           push: false
+          load: true
+          tags: agent-coordinator:ci
+
+      # RUNTIME SMOKE (homelab S9 #1988, 2026-09-27): a green build proves the image INSTALLS, not
+      # that it RUNS — the migration-lens review of the node 22→24 major (#23) named exactly that
+      # limit. The coordinator image is nothing but node running claude-code, so a base-image bump
+      # that builds fine and dies at `claude` startup would reach every coordinator/reviewer/
+      # responder pod AND the revert lane that rides the same image. Each tool the runbook calls
+      # must start and print its version; no auth, no network, no cluster.
+      - name: Runtime smoke — every bundled tool must start
+        run: |
+          set -eux
+          docker run --rm agent-coordinator:ci claude --version
+          docker run --rm agent-coordinator:ci gh --version
+          docker run --rm agent-coordinator:ci kubectl version --client
+          docker run --rm agent-coordinator:ci s5cmd version
+          docker run --rm agent-coordinator:ci python3 --version
 
       # pin-only-lint (ADR-100 addendum): the `.github/workflows` pin gate. Runs from homelab's
       # master script (sparse checkout) — a fix there reaches every caller at once. The lint
