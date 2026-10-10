@@ -10,13 +10,28 @@
 # build-image.sh` is the local mirror. homelab is the *consumer* — it references the image by tag.
 FROM node:24-bookworm-slim
 
-ARG KUBECTL_VERSION=v1.36.1
+# VERSION SETS (homelab#2014 shape (a), operator ruling 2026-10-10). claude-code and kubectl are
+# members of sets that must agree across the coordinator/reviewer (this image), the worker
+# (agent-base) and the seat, so neither floats here: both come from ONE homelab file,
+# `version-sets/devbox.lock`, which homelab's weekly devbox-update stamps (claude-code = the nixpkgs
+# version the worker's devbox resolves, kubectl = bounded to the fleet's Kubernetes minor). The build
+# passes them as ARGs (build-image.yaml sparse-fetches the stamp from homelab master); an EMPTY ARG
+# makes the build read the same stamp itself (the ADD below), so a bare `docker build` / ci.yaml is
+# pinned too — never an unpinned fallback. No hand version lives in this file any more.
+ARG CLAUDE_CODE_VERSION=""
+ARG KUBECTL_VERSION=""
+ADD https://raw.githubusercontent.com/teststuffstash/homelab/master/version-sets/devbox.lock /opt/version-sets.lock
 
-# OS tools + gh (official apt repo) + kubectl (pinned to the cluster minor).
+# OS tools + gh (official apt repo) + kubectl (the version-set stamp, bounded to the fleet minor).
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         ca-certificates curl git jq python3 gnupg less bash; \
+    stamp() { jq -er --arg t "$1" '.packages | to_entries[] | select(.key | startswith($t + "@")) | .value.version' /opt/version-sets.lock; }; \
+    CLAUDE_CODE_VERSION="${CLAUDE_CODE_VERSION:-$(stamp claude-code)}"; \
+    KUBECTL_VERSION="${KUBECTL_VERSION:-$(stamp kubectl)}"; KUBECTL_VERSION="v${KUBECTL_VERSION#v}"; \
+    test -n "$CLAUDE_CODE_VERSION"; test "$KUBECTL_VERSION" != v; \
+    echo "version set: claude-code ${CLAUDE_CODE_VERSION}, kubectl ${KUBECTL_VERSION}"; \
     # gh
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
         -o /usr/share/keyrings/githubcli-archive-keyring.gpg; \
@@ -33,8 +48,10 @@ RUN set -eux; \
     echo "de0fdbfa3aceae55e069ba81a0fc17b2026567637603734a387b2fca06c299b4  /tmp/s5cmd.tgz" | sha256sum -c -; \
     tar -xzf /tmp/s5cmd.tgz -C /usr/local/bin s5cmd; \
     chmod +x /usr/local/bin/s5cmd; rm /tmp/s5cmd.tgz; \
-    # Claude Code CLI
-    npm install -g @anthropic-ai/claude-code; \
+    # Claude Code CLI — pinned to the stamp (the worker's nix-resolved version), never npm latest
+    npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"; \
+    claude --version | grep -qF "$CLAUDE_CODE_VERSION"; \
+    /usr/local/bin/kubectl version --client | grep -qF "$KUBECTL_VERSION"; \
     rm -rf /var/lib/apt/lists/*
 
 # Pre-seed the three things that otherwise stop a fresh container on an interactive prompt, so it
