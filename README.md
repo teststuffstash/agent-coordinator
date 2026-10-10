@@ -29,8 +29,11 @@ deliberately does **not** carry `ANTHROPIC_API_KEY` — it would take auth prece
 ## Versioning
 
 The image tag is **content-addressed by `coordinator/Dockerfile`**: `YYYY-MM-DD-<dockerhash8>`.
-`:latest` tracks `master`. ⚠️ `gh` (apt) and `claude` (npm) install at `@latest`, so the *content*
-can drift without a Dockerfile change; pin them if you need bit-reproducibility.
+`:latest` tracks `master`. `claude` (npm) and `kubectl` are pinned to homelab's **version-set stamp**
+(`version-sets/devbox.lock`, stamped weekly by homelab's devbox-update — homelab#2014): the same
+claude-code the worker image runs, kubectl bounded to the fleet minor; the build reads the stamp from
+homelab master (build ARGs, or the Dockerfile's own `ADD` when they are empty). ⚠️ `gh` (apt) still
+installs at `@latest`, so the *content* can drift without a Dockerfile change.
 
 ## Build
 
