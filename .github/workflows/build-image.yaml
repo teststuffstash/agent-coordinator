@@ -168,6 +168,16 @@ jobs:
             exit 1
           fi
           sed -i -E "s#^(\s+newTag: ).*#\1${TAG}#" agents/coordinator/kustomization.yaml
+          # FU-152 (ruled 2026-10-14): kustomize cannot reach the two literal pins outside
+          # agents/coordinator/ — the AgentStack Composition (the per-stack scan/review/janitor
+          # CronWorkflows, a go-template string) and registry-cache gc-mirrors. They sat two
+          # months behind. Two homes, held equal by homelab's coordinator-pin-lint in `ci`; this
+          # sweep keeps them equal. Both paths are CI-gated (not codeowner), so the PR still
+          # auto-merges.
+          for f in argocd/resources/agentstack/composition.yaml argocd/resources/registry-cache/gc-mirrors.yaml; do
+            [ -f "$f" ] || { echo "::error::$f missing — the FU-152 literal pin moved; refusing a half-bumped PR"; exit 1; }
+            sed -i -E "s#(${IMG}):[A-Za-z0-9._-]+#\1:${TAG}#g" "$f"
+          done
           git commit -q -am "deploy: agent-coordinator ${TAG}"
           git push -q -f origin deploy/agent-coordinator
           PR=$(gh pr list --repo "${OWNER}/homelab" --head deploy/agent-coordinator --state open --json number --jq '.[0].number // empty')
