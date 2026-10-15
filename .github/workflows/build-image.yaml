@@ -181,8 +181,19 @@ jobs:
           git commit -q -am "deploy: agent-coordinator ${TAG}"
           git push -q -f origin deploy/agent-coordinator
           PR=$(gh pr list --repo "${OWNER}/homelab" --head deploy/agent-coordinator --state open --json number --jq '.[0].number // empty')
+          # The sweep above changes what the AgentStack Composition renders (the per-stack CronWorkflow
+          # images), and homelab's `xr-render --diff` in `ci` fails a render change the PR body does not
+          # declare — so the body carries the `Render-change:` line (homelab ci reads the body live).
+          BODY="First-party agent-coordinator image bump (CI-opened). Coordinator/reviewer pods pick it up on next spawn; the Argo CronWorkflow pins are ArgoCD-synced and roll on merge.
+
+          Render-change: agent-coordinator image pin in the AgentStack Composition (FU-152 deploy-pin sweep)"
+          BODY="$(printf '%s\n' "$BODY" | sed -E 's/^[[:space:]]+//')"
           [ -n "$PR" ] || PR=$(gh pr create --repo "${OWNER}/homelab" --base master --head deploy/agent-coordinator \
-            --title "deploy: agent-coordinator ${TAG}" --body "First-party agent-coordinator image bump (CI-opened). Coordinator/reviewer pods pick it up on next spawn; the Argo CronWorkflow pins are ArgoCD-synced and roll on merge." | grep -oE '[0-9]+$')
+            --title "deploy: agent-coordinator ${TAG}" --body "$BODY" | grep -oE '[0-9]+$')
+          # Re-applied on a REUSED PR too (the long-lived-branch trap below): the body must carry the
+          # Render-change line whatever opened it.
+          gh pr edit "$PR" --repo "${OWNER}/homelab" --title "deploy: agent-coordinator ${TAG}" --body "$BODY" \
+            || echo "::warning::could not set the body on homelab#$PR — xr-render will red an undeclared render change"
           # The MECHANICAL lane (homelab docs/dependency-upgrades.md 2): `automerge` makes homelab's
           # review reflex SKIP this PR (review-reflex.sh:262) — a one-line CalVer bump is not worth an
           # LLM reviewer session — and with `dependencies` the renovate-approve reflex posts the
