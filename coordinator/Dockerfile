@@ -8,7 +8,7 @@
 #
 # Built + pushed by CI on every push to master (.github/workflows/build-image.yaml); `scripts/
 # build-image.sh` is the local mirror. homelab is the *consumer* — it references the image by tag.
-FROM node:24-bookworm-slim
+FROM node:26-bookworm-slim
 
 # VERSION SETS (homelab#2014 shape (a), operator ruling 2026-10-10). claude-code and kubectl are
 # members of sets that must agree across the coordinator/reviewer (this image), the worker
