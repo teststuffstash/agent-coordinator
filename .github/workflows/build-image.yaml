@@ -188,6 +188,14 @@ jobs:
 
           Render-change: agent-coordinator image pin in the AgentStack Composition (FU-152 deploy-pin sweep)"
           BODY="$(printf '%s\n' "$BODY" | sed -E 's/^[[:space:]]+//')"
+          # A worker round on this long-lived PR links its issue in the body (`Fixes #N`); that link holds
+          # homelab's phantom-review belt while the PR is open and closes the issue on merge. This job
+          # rewrites the body on every build, so the link lines of the body being replaced are carried
+          # forward — dropping them stranded homelab#3247 open and unlabelled.
+          KEEP=""
+          [ -z "$PR" ] || KEEP="$(gh pr view "$PR" --repo "${OWNER}/homelab" --json body --jq '.body // ""' | tr -d '\r' \
+            | grep -iE '^[[:space:]]*((implements|close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+|issue:[[:space:]]*)#[0-9]+[[:space:]]*$' | sed -E 's/^[[:space:]]+//' | sort -u || true)"
+          [ -z "$KEEP" ] || BODY="$(printf '%s\n\n%s' "$KEEP" "$BODY")"
           [ -n "$PR" ] || PR=$(gh pr create --repo "${OWNER}/homelab" --base master --head deploy/agent-coordinator \
             --title "deploy: agent-coordinator ${TAG}" --body "$BODY" | grep -oE '[0-9]+$')
           # Re-applied on a REUSED PR too (the long-lived-branch trap below): the body must carry the
