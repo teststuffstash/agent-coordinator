@@ -1,11 +1,17 @@
-# Build + push the agent-coordinator image to ghcr on every master push. Single responsibility: this
+# Build + push the agent-coordinator image to the homelab registry on every master push. Single responsibility: this
 # repo produces one artifact, so there are no path filters or "is this a deploy?" rules — every push
 # to master builds. The tag is content-addressed by the Dockerfile (same Dockerfile → same tag), so a
 # rebuild is reproducible; note the `@latest` apt/npm pins (gh, claude) can still drift the image
 # content without a Dockerfile change — pin them if bit-reproducibility matters.
 #
-# amd64-only (the coordinator runs in-cluster on x86). Self-hosted ARC runner (homelab-ephemeral);
-# ghcr push auth is the job's GITHUB_TOKEN (packages: write) — no extra secret. Mirrors agent-runtime.
+# amd64-only (the coordinator runs in-cluster on x86). Self-hosted ARC runner (homelab-ephemeral).
+# Mirrors agent-runtime.
+#
+# PUBLISHED TO registry.teststuff.net ONLY, never ghcr. The image carries the Claude Code binary,
+# which is proprietary: a public ghcr package handed it to anyone. The homelab registry (homelab
+# ADR-121) is reachable from the LAN only — anonymous pull there, push as `releaser` with the
+# REGISTRY_PUSH_TOKEN repo secret (a copy homelab's scripts/github-secrets-sync.sh writes). A
+# missing secret fails the login step, so no image and no pin PR: the cluster stays on its pin.
 name: build-image
 
 on:
@@ -34,7 +40,6 @@ jobs:
     runs-on: homelab-ephemeral
     permissions:
       contents: read
-      packages: write
     outputs:
       tag: ${{ steps.ver.outputs.tag }}
     steps:
@@ -42,16 +47,16 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: registry.teststuff.net
+          username: releaser
+          password: ${{ secrets.REGISTRY_PUSH_TOKEN }}
       # Version = commit-date CalVer + short git sha (2026.<m>.<d>-g<sha>) — consistent with the
       # openrouter-operator / sleep-ingester deploy versioning. Traceable (tag → commit); the path
       # filter above keeps it from churning on changes that don't affect the image.
       - name: Compute version
         id: ver
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/agent-coordinator
+          IMAGE: registry.teststuff.net/agent-coordinator
         run: |
           SHA=$(git rev-parse --short=12 HEAD)
           # BUILD date, not commit date (2026-09-27): a scheduled rebuild of an unchanged commit must
@@ -97,15 +102,15 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/agent-coordinator:${{ steps.ver.outputs.tag }}
-            ghcr.io/${{ github.repository_owner }}/agent-coordinator:latest
+            registry.teststuff.net/agent-coordinator:${{ steps.ver.outputs.tag }}
+            registry.teststuff.net/agent-coordinator:latest
       # RUNTIME SMOKE on the PUSHED artifact (mirror of ci.yaml's step; homelab S9 #1988): the tag
-      # is already in ghcr, but nothing pins it until deploy-pin runs — and deploy-pin `needs` this
+      # is already in the registry, but nothing pins it until deploy-pin runs — and deploy-pin `needs` this
       # job, so a tool that cannot start turns the master run red (GithubWorkflowRunFailed) and the
       # cluster never sees the tag. Pulls the exact bytes that would ship, never a local rebuild.
       - name: Runtime smoke — the pushed image must start every bundled tool
         env:
-          REF: ghcr.io/${{ github.repository_owner }}/agent-coordinator:${{ steps.ver.outputs.tag }}
+          REF: registry.teststuff.net/agent-coordinator:${{ steps.ver.outputs.tag }}
         run: |
           set -eux
           docker pull "$REF"
@@ -114,6 +119,24 @@ jobs:
           docker run --rm "$REF" kubectl version --client
           docker run --rm "$REF" s5cmd version
           docker run --rm "$REF" python3 --version
+      # Retention (homelab FU-274): the registry is one 150Gi volume, so every build untags the ones
+      # outside the keep-set — every tag homelab master still mentions (the other kustomizations pin
+      # older ones), the newest few, and this one. The rule lives in ONE place, homelab
+      # scripts/registry-keep-set.sh (agent-runtime runs the same script); the registry's daily
+      # garbage-collect reclaims the bytes. Non-fatal: housekeeping never gates the pin.
+      - name: Fetch homelab master (the keep-set reads its pins)
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: teststuffstash/homelab
+          ref: master
+          path: .homelab-master
+      - name: "Untag builds outside the keep-set (non-fatal)"
+        continue-on-error: true
+        env:
+          REGISTRY_PUSH_TOKEN: ${{ secrets.REGISTRY_PUSH_TOKEN }}
+          KEEP_TAGS: ${{ steps.ver.outputs.tag }}
+        run: bash .homelab-master/scripts/registry-keep-set.sh agent-coordinator --apply
 
   # deploy-pin: bump homelab agents/images.env + every manifest that pins this image (the Argo
   # CronWorkflow yamls are ArgoCD-synced, so the merged bump PR rolls them near-instantly).
@@ -146,7 +169,7 @@ jobs:
         run: |
           set -euo pipefail
           OWNER="${{ github.repository_owner }}"
-          VAR=AGENT_COORDINATOR_IMAGE; IMG="ghcr.io/${OWNER}/agent-coordinator"; NEWREF="${IMG}:${TAG}"
+          VAR=AGENT_COORDINATOR_IMAGE; IMG="registry.teststuff.net/agent-coordinator"; NEWREF="${IMG}:${TAG}"
           git clone --quiet --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/${OWNER}/homelab.git" h && cd h
           cur=$(grep -m1 "^${VAR}=" agents/images.env | cut -d= -f2-)
           [ "$cur" = "$NEWREF" ] && { echo "images.env already ${VAR}=${NEWREF}"; exit 0; }
