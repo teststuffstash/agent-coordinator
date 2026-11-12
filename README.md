@@ -8,7 +8,7 @@ produces the artifact — the sibling of [`agent-runtime`](https://github.com/te
 
 ## Why its own repo
 
-Same reason as `agent-runtime`: the image needs a build-and-publish pipeline (docker → ghcr,
+Same reason as `agent-runtime`: the image needs a build-and-publish pipeline (docker → registry.teststuff.net,
 versioned, Renovate). Bolting that onto the homelab IaC monorepo would mean path filters and "what
 does this push build/deploy?" rules on a repo that otherwise just applies Tofu/Ansible. Here the rule
 is trivial: **every push to `master` builds**. homelab is the *consumer* — `agents/coordinator-session.sh`
