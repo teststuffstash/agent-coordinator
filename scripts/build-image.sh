@@ -4,11 +4,11 @@
 # normal path (every push to master builds + pushes); this is the manual/escape-hatch mirror.
 #
 #   bash scripts/build-image.sh             # build only (needs docker)
-#   PUSH=true bash scripts/build-image.sh   # build + push (after `docker login ghcr.io`)
+#   PUSH=true bash scripts/build-image.sh   # build + push (after `docker login registry.teststuff.net`)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-REGISTRY="${REGISTRY:-ghcr.io/teststuffstash}"
+REGISTRY="${REGISTRY:-registry.teststuff.net}"
 IMAGE="$REGISTRY/agent-coordinator"
 DOCKERHASH="$(sha256sum coordinator/Dockerfile | cut -c1-8)"
 TAG="$(date -u +%Y-%m-%d)-${DOCKERHASH}"

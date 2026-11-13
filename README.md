@@ -8,7 +8,7 @@ produces the artifact — the sibling of [`agent-runtime`](https://github.com/te
 
 ## Why its own repo
 
-Same reason as `agent-runtime`: the image needs a build-and-publish pipeline (docker → ghcr,
+Same reason as `agent-runtime`: the image needs a build-and-publish pipeline (docker → registry.teststuff.net,
 versioned, Renovate). Bolting that onto the homelab IaC monorepo would mean path filters and "what
 does this push build/deploy?" rules on a repo that otherwise just applies Tofu/Ansible. Here the rule
 is trivial: **every push to `master` builds**. homelab is the *consumer* — `agents/coordinator-session.sh`
@@ -39,15 +39,14 @@ installs at `@latest`, so the *content* can drift without a Dockerfile change.
 
 ```sh
 bash scripts/build-image.sh             # build only (needs docker)
-PUSH=true bash scripts/build-image.sh   # build + push (after `docker login ghcr.io`)
+PUSH=true bash scripts/build-image.sh   # build + push (after `docker login registry.teststuff.net`)
 ```
 
 CI does this on every push to master (`.github/workflows/build-image.yaml`), on the self-hosted
-`homelab-ephemeral` ARC runner, authenticating the ghcr push with the job's built-in `GITHUB_TOKEN`
-(`packages: write`) — **no extra secret/token**.
+`homelab-ephemeral` ARC runner, pushing to the homelab registry `registry.teststuff.net` with the
+`REGISTRY_PUSH_TOKEN` repo secret (a row in homelab `scripts/github-secrets-sync.sh`).
 
-## One-time: make the package public
+## Never on ghcr
 
-After the first successful build, make `ghcr.io/teststuffstash/agent-coordinator` public (Package
-settings → Change visibility), or the in-cluster pull `ImagePullBackOff`s (public repo → public
-package is simplest; the alternative is an imagePullSecret).
+The image carries the Claude Code binary, which is proprietary, so it is not published to a public
+package. The homelab registry is reachable from the LAN only; nodes pull from it anonymously.
